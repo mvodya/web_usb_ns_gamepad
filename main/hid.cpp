@@ -2,6 +2,7 @@
 
 #include "class/hid/hid.h"
 #include "class/hid/hid_device.h"
+#include "device/usbd.h"
 #include "esp_console.h"
 #include "esp_err.h"
 #include "esp_log.h"
@@ -85,6 +86,21 @@ const uint8_t hid_report_descriptor[] = {
     // === [End of descriptor] ===
     HID_COLLECTION_END};
 
+typedef struct ATTRIBUTE_PACKED {
+  // === [Button Input: 14 buttons] ===
+  uint16_t buttons;
+  // === [D-Pad: Hat switch] ===
+  uint8_t dPad;
+
+  // === [Analog sticks: X/Y/Z/Rz axes] ===
+  uint8_t leftXAxis;
+  uint8_t leftYAxis;
+  uint8_t rightXAxis;
+  uint8_t rightYAxis;
+
+  uint8_t filler;
+} hid_device_report_t;
+
 // USB Device descriptor
 const tusb_desc_device_t device_descriptor = {
     .bLength = sizeof(device_descriptor),       // Size of this descriptor in bytes
@@ -127,7 +143,7 @@ static const uint8_t hid_configuration_descriptor[] = {
 
 // TinyUSB HID callback
 // Invoked when received GET HID REPORT DESCRIPTOR request
-extern "C"  uint8_t const* tud_hid_descriptor_report_cb(uint8_t instance) {
+extern "C" uint8_t const* tud_hid_descriptor_report_cb(uint8_t instance) {
   ESP_LOGI(TAG, "HID descriptor report invoked");
   // We use only one interface and one HID report descriptor, so we can ignore parameter instance
   return hid_report_descriptor;
@@ -135,8 +151,9 @@ extern "C"  uint8_t const* tud_hid_descriptor_report_cb(uint8_t instance) {
 
 // TinyUSB HID callback
 // Invoked when received GET_REPORT control request
-extern "C"  uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type,
-                               uint8_t* buffer, uint16_t reqlen) {
+extern "C" uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id,
+                                          hid_report_type_t report_type, uint8_t* buffer,
+                                          uint16_t reqlen) {
   (void)instance;
   (void)report_id;
   (void)report_type;
@@ -149,8 +166,28 @@ extern "C"  uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, 
 // TinyUSB HID callback
 // Invoked when received SET_REPORT control request or
 // received data on OUT endpoint ( Report ID = 0, Type = 0 )
-extern "C" void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type,
-                           uint8_t const* buffer, uint16_t bufsize) {}
+extern "C" void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id,
+                                      hid_report_type_t report_type, uint8_t const* buffer,
+                                      uint16_t bufsize) {}
+
+// Gamepad report state
+static hid_device_report_t hid_report_state;
+
+// Clear report state
+// Unpress all buttons & set axis to 0
+inline void clear_report_state() {
+  memset(&hid_report_state, 0x00, sizeof(hid_report_state));
+}
+
+// Is Gamepad connected?
+static bool isGamepadConnected = false;
+
+// Report HID semaphore
+// unlocks, when HID report is sended
+SemaphoreHandle_t reportSemaphore;
+inline void wait_hid_report() {
+  xSemaphoreTake(reportSemaphore, pdMS_TO_TICKS(1000));
+}
 
 // Task for USB HID report
 void hid_handler_task(void*) {
@@ -158,8 +195,34 @@ void hid_handler_task(void*) {
   TickType_t lastWakeTime = xTaskGetTickCount();
   ESP_LOGI(TAG, "HID handler task runned, pooling tickrate: %d", 10);
 
+  clear_report_state();
+
   while (1) {
     if (tud_mounted()) {
+      if (!isGamepadConnected && !tud_suspended()) {
+        clear_report_state();
+
+        // For connection we need to trigger some buttons after USB initialization
+        // Push two L & R triggers for init
+        tud_hid_report(0, &hid_report_state, sizeof(hid_report_state));
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        hid_report_state.buttons = (uint16_t)1;
+        tud_hid_report(0, &hid_report_state, sizeof(hid_report_state));
+        vTaskDelay(pdMS_TO_TICKS(100));
+        hid_report_state.buttons = (uint16_t)0;
+        tud_hid_report(0, &hid_report_state, sizeof(hid_report_state));
+        vTaskDelay(pdMS_TO_TICKS(100));
+
+        ESP_LOGI(TAG, "Gamepad connected");
+        isGamepadConnected = true;
+      } else if (isGamepadConnected && tud_suspended()) {
+        ESP_LOGI(TAG, "Gamepad unconnected");
+        isGamepadConnected = false;
+      }
+
+      // Report gamepad state
+      tud_hid_report(0, &hid_report_state, sizeof(hid_report_state));
+      xSemaphoreGive(reportSemaphore);
     }
 
     vTaskDelayUntil(&lastWakeTime, freq);
@@ -169,6 +232,9 @@ void hid_handler_task(void*) {
 // Setup USB descriptors & initialize USB stack
 esp_err_t init() {
   ESP_LOGI(TAG, "USB initialization");
+
+  // Create semaphore for HID task
+  reportSemaphore = xSemaphoreCreateBinary();
 
   // TinyUSB config
   const tinyusb_config_t tusb_cfg = {
@@ -194,9 +260,22 @@ esp_err_t init_hid_task() {
 
 // CMD: Prints USB information
 static int cmd_usbinfo(int argc, char** argv) {
-  printf("Device HID name: %s\r\n", hid_string_descriptor[4]);
-  printf("Device mount state: %s\r\n", tud_mounted() ? "mounted" : "unmounted");
-  printf("Pooling tickrate: %d\r\n", 10);
+  printf("USB info:\r\n");
+  printf("  Device HID name: %s\r\n", hid_string_descriptor[4]);
+  printf("  Device mount state: %s\r\n", tud_mounted() ? "mounted" : "unmounted");
+  printf("  Device connection state: %s\r\n", tud_connected() ? "connected" : "unconnected");
+  printf("  Device suspension state: %s\r\n", tud_suspended() ? "suspended" : "not suspended");
+  printf("  Gamepad connected: %s\r\n", isGamepadConnected ? "true" : "false");
+  printf("  Pooling tickrate: %d\r\n", 10);
+  return 0;
+}
+
+static int cmd_gptrig(int argc, char** argv) {
+  hid_report_state.buttons |= (uint16_t)1 << 0x00;
+  wait_hid_report();
+  vTaskDelay(pdMS_TO_TICKS(100));
+  hid_report_state.buttons &= ~((uint16_t)1 << 0x00);
+  wait_hid_report();
   return 0;
 }
 
@@ -204,13 +283,21 @@ static int cmd_usbinfo(int argc, char** argv) {
 esp_err_t cmds_register() {
   ESP_LOGI(TAG, "Register console commands");
 
-  const esp_console_cmd_t cmd_test = {
+  const esp_console_cmd_t cmd_usbinfo_cfg = {
       .command = "usbinfo",
       .help = "Get USB status information",
       .hint = NULL,
       .func = &cmd_usbinfo,
   };
-  ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_test));
+  ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_usbinfo_cfg));
+
+  const esp_console_cmd_t cmd_gptrig_cfg = {
+      .command = "gptrig",
+      .help = "Test gamepad trigger",
+      .hint = NULL,
+      .func = &cmd_gptrig,
+  };
+  ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_gptrig_cfg));
 
   return ESP_OK;
 }
