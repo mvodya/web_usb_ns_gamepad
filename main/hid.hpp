@@ -1,3 +1,5 @@
+#pragma once
+
 #include "esp_err.h"
 
 namespace HID {
@@ -10,6 +12,8 @@ esp_err_t init_hid_task();
 
 // Register console commands
 esp_err_t cmds_register();
+
+#define ATTRIBUTE_PACKED  __attribute__((packed, aligned(1)))
 
 // HID device report
 typedef struct ATTRIBUTE_PACKED {
