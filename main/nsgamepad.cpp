@@ -55,6 +55,15 @@ void releaseAll(bool u) {
   }
 }
 
+// Press and release button
+void click(Buttons button, uint16_t delay) {
+  ESP_LOGI(TAG, "Click button %i [%s], delay: %ims", button, button_names[button], delay);
+  press(button, true);
+  vTaskDelay(pdMS_TO_TICKS(delay));
+  release(button, true);
+  vTaskDelay(pdMS_TO_TICKS(delay));
+}
+
 // Args for press & release cmds
 static struct {
   struct arg_str* button =
@@ -173,10 +182,7 @@ static int cmd_click(int argc, char** argv) {
     for (uint16_t b = 0; b < button_names_num; b++) {
       if (strcmp(button_names[b], cmd_click_args.button->sval[i]) == 0) {
         // Click button
-        press(static_cast<Buttons>(b), true);
-        vTaskDelay(pdMS_TO_TICKS(delay));
-        release(static_cast<Buttons>(b), true);
-        vTaskDelay(pdMS_TO_TICKS(delay));
+        click(static_cast<Buttons>(b), delay);
         clicked = true;
         break;
       }
