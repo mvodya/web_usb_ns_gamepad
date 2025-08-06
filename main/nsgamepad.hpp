@@ -1,0 +1,69 @@
+#pragma once
+
+#include <cstdint>
+#include "esp_err.h"
+
+namespace NSGamepad {
+
+// Gamepad buttons
+enum Buttons : uint16_t {
+  Y = 0,
+  B,
+  A,
+  X,
+  L,
+  R,
+  ZL,
+  ZR,
+  Minus,
+  Plus,
+  LStick,
+  RStick,
+  Home,
+  Capture,
+  Reserved1,
+  Reserved2
+};
+
+// Dpad directions
+enum DpadDirection : uint8_t {
+  up = 0,
+  up_right,
+  right,
+  down_right,
+  down,
+  down_left,
+  left,
+  up_left,
+  centered = 0xF
+};
+
+// Update gamepad state (send report to console)
+void update();
+
+// Press button
+void press(Buttons button, bool update = false);
+// Release button
+void release(Buttons button, bool update = false);
+// Release all buttons
+void releaseAll(bool update = false);
+
+// Press and release button
+void click(Buttons button, uint16_t delay = 100);
+
+// Set dpad direction
+void dpad(DpadDirection direction, bool update = false);
+// Set dpad pressed buttons
+void dpad(bool up, bool down, bool left, bool right, bool update = false);
+
+// Left stick axis
+void leftXAxis(uint8_t);
+void leftYAxis(uint8_t);
+// Right stick axi
+void rightXAxis(uint8_t);
+void rightYAxis(uint8_t);
+
+// Register console commands
+esp_err_t cmds_register();
+
+}  // namespace NSGamepad

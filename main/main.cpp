@@ -3,6 +3,7 @@
 #include "esp_console.h"
 #include "esp_log.h"
 #include "hid.hpp"
+#include "nsgamepad.hpp"
 
 static const char* TAG = "app";
 
@@ -23,6 +24,7 @@ void app(void) {
   // Register console commands
   esp_console_register_help_command();
   ESP_ERROR_CHECK(HID::cmds_register());
+  ESP_ERROR_CHECK(NSGamepad::cmds_register());
 
   // Start console
   esp_console_dev_uart_config_t hw_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
