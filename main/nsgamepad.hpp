@@ -51,10 +51,10 @@ void releaseAll(bool update = false);
 // Press and release button
 void click(Buttons button, uint16_t delay = 100);
 
-// Set dpad direction
-void dpad(DpadDirection direction, bool update = false);
 // Set dpad pressed buttons
-void dpad(bool up, bool down, bool left, bool right, bool update = false);
+void dpad(DpadDirection direction, bool update = false);
+// Press and release dpad
+void dpadClick(DpadDirection direction, uint16_t delay = 100);
 
 // Left stick axis
 void leftXAxis(uint8_t);

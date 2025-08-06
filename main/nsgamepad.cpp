@@ -20,6 +20,11 @@ static const char* button_names[] = {"Y",    "B",       "A",         "X",       
                                      "Home", "Capture", "Reserved1", "Reserved2"};
 const int button_names_num = 16;
 
+// Dpad string list
+static const char* dpad_names[] = {"U", "UR", "R", "DR", "D", "DL", "L", "UL",
+                                   "0", "",   "",  "",   "",  "",   "",  ""};
+const int dpad_names_num = 9;
+
 // Update gamepad state (send report to console)
 void update() {
   HID::set_hid_report(hid_report);
@@ -48,7 +53,7 @@ void release(Buttons button, bool u) {
 // Release all buttons
 void releaseAll(bool u) {
   ESP_LOGI(TAG, "Release all buttons (%s)", u ? "+upd" : "noupd");
-  memset(&hid_report, 0x00, sizeof(hid_report));
+  memset(&hid_report.buttons, 0x00, sizeof(hid_report.buttons));
 
   if (u) {
     update();
@@ -64,18 +69,37 @@ void click(Buttons button, uint16_t delay) {
   vTaskDelay(pdMS_TO_TICKS(delay));
 }
 
+// Set dpad direction
+void dpad(DpadDirection d, bool u) {
+  ESP_LOGI(TAG, "Set dpad direction [%s] (%s)", dpad_names[d], u ? "+upd" : "noupd");
+  hid_report.dPad = d;
+
+  if (u) {
+    update();
+  }
+}
+
+// Press and release dpad
+void dpadClick(DpadDirection d, uint16_t delay) {
+  ESP_LOGI(TAG, "Click dpad in direction [%s], delay: %ims", dpad_names[d], delay);
+
+  dpad(d, true);
+  vTaskDelay(pdMS_TO_TICKS(delay));
+  dpad(DpadDirection::centered, true);
+  vTaskDelay(pdMS_TO_TICKS(delay));
+}
+
 // Args for press & release cmds
 static struct {
   struct arg_str* button =
-      arg_strn(NULL, NULL,
-               "<Y|B|A|X|L|R|ZL|ZR|Minus|Plus|LStick|RStick|Home|Capture|Reserved1|Reserved2|all>",
-               1, 16, "Button to press");
+      arg_strn(NULL, NULL, "<Y|B|A|X|L|R|ZL|ZR|Minus|Plus|LStick|RStick|Home|Capture|all>", 1, 16,
+               "Gamepad button");
   struct arg_end* end = arg_end(20);
 } cmd_press_release_args;
 
 // CMD: Press gamepad button
 static int cmd_press(int argc, char** argv) {
-  // Check argument parse errpr
+  // Check argument parse error
   int nerrors = arg_parse(argc, argv, (void**)&cmd_press_release_args);
   if (nerrors != 0) {
     arg_print_errors(stderr, cmd_press_release_args.end, argv[0]);
@@ -110,7 +134,7 @@ static int cmd_press(int argc, char** argv) {
 
 // CMD: Release gamepad button
 static int cmd_release(int argc, char** argv) {
-  // Check argument parse errpr
+  // Check argument parse error
   int nerrors = arg_parse(argc, argv, (void**)&cmd_press_release_args);
   if (nerrors != 0) {
     arg_print_errors(stderr, cmd_press_release_args.end, argv[0]);
@@ -150,15 +174,15 @@ static int cmd_release(int argc, char** argv) {
 
 // CMD: Click gamepad button
 static struct {
-  struct arg_str* button = arg_strn(
-      NULL, NULL, "<Y|B|A|X|L|R|ZL|ZR|Minus|Plus|LStick|RStick|Home|Capture|Reserved1|Reserved2>",
-      1, 16, "Button to click");
+  struct arg_str* button =
+      arg_strn(NULL, NULL, "<Y|B|A|X|L|R|ZL|ZR|Minus|Plus|LStick|RStick|Home|Capture>", 1, 16,
+               "Gamepad button");
   struct arg_int* delay =
       arg_int0("d", "delay", "<d>", "Delay after press and release, default = 100");
   struct arg_end* end = arg_end(20);
 } cmd_click_args;
 static int cmd_click(int argc, char** argv) {
-  // Check argument parse errpr
+  // Check argument parse error
   int nerrors = arg_parse(argc, argv, (void**)&cmd_click_args);
   if (nerrors != 0) {
     arg_print_errors(stderr, cmd_click_args.end, argv[0]);
@@ -195,6 +219,88 @@ static int cmd_click(int argc, char** argv) {
   return 0;
 }
 
+// CMD: Set dpad direction
+static struct {
+  struct arg_str* direction =
+      arg_str0(NULL, NULL, "<U|UR|R|DR|D|DL|L|UL|0>", "Dpad direction, 0 - no direction");
+  struct arg_end* end = arg_end(20);
+} cmd_setdpad_args;
+static int cmd_setdpad(int argc, char** argv) {
+  // Check argument parse error
+  int nerrors = arg_parse(argc, argv, (void**)&cmd_setdpad_args);
+  if (nerrors != 0) {
+    arg_print_errors(stderr, cmd_setdpad_args.end, argv[0]);
+    return 1;
+  }
+
+  if (cmd_setdpad_args.direction->count < 1) {
+    printf("No dpad direction setted\r\n");
+    return 1;
+  }
+
+  // Search direction
+  bool setted = false;
+  for (uint16_t d = 0; d < dpad_names_num; d++) {
+    if (strcmp(dpad_names[d], cmd_setdpad_args.direction->sval[0]) == 0) {
+      // Set direction
+      dpad(static_cast<DpadDirection>(d), true);
+      setted = true;
+      break;
+    }
+  }
+  if (!setted) {
+    printf("Unrecognized direction: \"%s\"\r\n", cmd_setdpad_args.direction->sval[0]);
+  }
+
+  return 0;
+}
+
+// CMD: Set & unset dpad direction
+static struct {
+  struct arg_str* direction =
+      arg_strn(NULL, NULL, "<U|UR|R|DR|D|DL|L|UL|0>", 1, 16, "Dpad direction, 0 - no direction");
+  struct arg_int* delay =
+      arg_int0("d", "delay", "<d>", "Delay after press and release, default = 100");
+  struct arg_end* end = arg_end(20);
+} cmd_dpad_args;
+static int cmd_dpad(int argc, char** argv) {
+  // Check argument parse error
+  int nerrors = arg_parse(argc, argv, (void**)&cmd_dpad_args);
+  if (nerrors != 0) {
+    arg_print_errors(stderr, cmd_dpad_args.end, argv[0]);
+    return 1;
+  }
+
+  if (cmd_dpad_args.direction->count < 1) {
+    printf("No dpad direction setted\r\n");
+    return 1;
+  }
+
+  // Set delay
+  int delay = 100;
+  if (cmd_dpad_args.delay->count == 1) {
+    delay = cmd_dpad_args.delay->ival[0];
+  }
+
+  for (int i = 0; i < cmd_dpad_args.direction->count; i++) {
+    // Search direction
+    bool clicked = false;
+    for (uint16_t d = 0; d < dpad_names_num; d++) {
+      if (strcmp(dpad_names[d], cmd_dpad_args.direction->sval[i]) == 0) {
+        // Set direction
+        dpadClick(static_cast<DpadDirection>(d), delay);
+        clicked = true;
+        break;
+      }
+    }
+    if (!clicked) {
+      printf("Unrecognized direction: \"%s\"\r\n", cmd_dpad_args.direction->sval[i]);
+    }
+  }
+
+  return 0;
+}
+
 // Register console commands
 esp_err_t cmds_register() {
   ESP_LOGI(TAG, "Register console commands");
@@ -207,6 +313,7 @@ esp_err_t cmds_register() {
                                            .argtable = &cmd_press_release_args};
   ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_press_cfg));
 
+  // Register release command
   const esp_console_cmd_t cmd_release_cfg = {.command = "release",
                                              .help = "Release gamepad button",
                                              .hint = NULL,
@@ -214,12 +321,29 @@ esp_err_t cmds_register() {
                                              .argtable = &cmd_press_release_args};
   ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_release_cfg));
 
+  // Register click command
   const esp_console_cmd_t cmd_click_cfg = {.command = "click",
                                            .help = "Press & release gamepad button",
                                            .hint = NULL,
                                            .func = &cmd_click,
                                            .argtable = &cmd_click_args};
   ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_click_cfg));
+
+  // Register setdpad command
+  const esp_console_cmd_t cmd_setdpad_cfg = {.command = "setdpad",
+                                             .help = "Set dpad direction",
+                                             .hint = NULL,
+                                             .func = &cmd_setdpad,
+                                             .argtable = &cmd_setdpad_args};
+  ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_setdpad_cfg));
+
+  // Register dpad command
+  const esp_console_cmd_t cmd_dpad_cfg = {.command = "dpad",
+                                          .help = "Set & unset dpad direction",
+                                          .hint = NULL,
+                                          .func = &cmd_dpad,
+                                          .argtable = &cmd_dpad_args};
+  ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_dpad_cfg));
 
   return ESP_OK;
 }
