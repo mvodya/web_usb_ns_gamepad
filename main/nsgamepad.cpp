@@ -5,6 +5,7 @@
 #include "argtable3/argtable3.h"
 #include "esp_console.h"
 #include "esp_log.h"
+#include "freertos/idf_additions.h"
 #include "hid.hpp"
 
 namespace NSGamepad {
@@ -139,7 +140,52 @@ static int cmd_release(int argc, char** argv) {
 }
 
 // CMD: Click gamepad button
+static struct {
+  struct arg_str* button = arg_strn(
+      NULL, NULL, "<Y|B|A|X|L|R|ZL|ZR|Minus|Plus|LStick|RStick|Home|Capture|Reserved1|Reserved2>",
+      1, 16, "Button to click");
+  struct arg_int* delay =
+      arg_int0("d", "delay", "<d>", "Delay after press and release, default = 100");
+  struct arg_end* end = arg_end(20);
+} cmd_click_args;
 static int cmd_click(int argc, char** argv) {
+  // Check argument parse errpr
+  int nerrors = arg_parse(argc, argv, (void**)&cmd_click_args);
+  if (nerrors != 0) {
+    arg_print_errors(stderr, cmd_click_args.end, argv[0]);
+    return 1;
+  }
+
+  if (cmd_click_args.button->count < 1) {
+    printf("No buttons setted\r\n");
+    return 1;
+  }
+
+  // Set delay
+  int delay = 100;
+  if (cmd_click_args.delay->count == 1) {
+    delay = cmd_click_args.delay->ival[0];
+  }
+
+  for (int i = 0; i < cmd_click_args.button->count; i++) {
+    // Search button
+    bool clicked = false;
+    for (uint16_t b = 0; b < button_names_num; b++) {
+      if (strcmp(button_names[b], cmd_click_args.button->sval[i]) == 0) {
+        // Click button
+        press(static_cast<Buttons>(b), true);
+        vTaskDelay(pdMS_TO_TICKS(delay));
+        release(static_cast<Buttons>(b), true);
+        vTaskDelay(pdMS_TO_TICKS(delay));
+        clicked = true;
+        break;
+      }
+    }
+    if (!clicked) {
+      printf("Unrecognized button: \"%s\"\r\n", cmd_click_args.button->sval[i]);
+    }
+  }
+
   return 0;
 }
 
@@ -162,12 +208,11 @@ esp_err_t cmds_register() {
                                              .argtable = &cmd_press_release_args};
   ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_release_cfg));
 
-  const esp_console_cmd_t cmd_click_cfg = {
-      .command = "click",
-      .help = "Press & release gamepad button",
-      .hint = NULL,
-      .func = &cmd_click,
-  };
+  const esp_console_cmd_t cmd_click_cfg = {.command = "click",
+                                           .help = "Press & release gamepad button",
+                                           .hint = NULL,
+                                           .func = &cmd_click,
+                                           .argtable = &cmd_click_args};
   ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_click_cfg));
 
   return ESP_OK;
