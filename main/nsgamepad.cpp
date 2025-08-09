@@ -97,6 +97,30 @@ void dpadClick(DpadDirection d, uint16_t delay) {
   vTaskDelay(pdMS_TO_TICKS(delay));
 }
 
+// Left stick axis
+void leftAxis(uint8_t x, uint8_t y, bool u) {
+  ESP_LOGI(TAG, "Set left axis value: x: %d / y: %d (%s)", x, y, u ? "+upd" : "noupd");
+
+  hid_report.leftXAxis = x;
+  hid_report.leftYAxis = y;
+
+  if (u) {
+    update();
+  }
+}
+
+// Right stick axis
+void rightAxis(uint8_t x, uint8_t y, bool u) {
+  ESP_LOGI(TAG, "Set right axis value: x: %d / y: %d (%s)", x, y, u ? "+upd" : "noupd");
+
+  hid_report.rightXAxis = x;
+  hid_report.rightYAxis = y;
+
+  if (u) {
+    update();
+  }
+}
+
 // Args for press & release cmds
 static struct {
   struct arg_str* button =
@@ -309,6 +333,39 @@ static int cmd_dpad(int argc, char** argv) {
   return 0;
 }
 
+// CMD: Set value for axis
+static struct {
+  struct arg_str* side = arg_str0(NULL, NULL, "<L|R>", "Side of axis (left or right)");
+  struct arg_int* x = arg_int0(NULL, NULL, "<0-256>", "X value (127 - zero position)");
+  struct arg_int* y = arg_int0(NULL, NULL, "<0-256>", "Y value (127 - zero position)");
+  struct arg_end* end = arg_end(2);
+} cmd_axis_args;
+
+static int cmd_axis(int argc, char** argv) {
+  // Check argument parse error
+  int nerrors = arg_parse(argc, argv, (void**)&cmd_axis_args);
+  if (nerrors != 0) {
+    arg_print_errors(stderr, cmd_axis_args.end, argv[0]);
+    return 1;
+  }
+
+  if (cmd_axis_args.side->count == 0) {
+    printf("Please, set side (L or R)\n");
+    return 1;
+  }
+  if (cmd_axis_args.x->count == 0 || cmd_axis_args.y->count == 0) return 1;
+
+  if (cmd_axis_args.side->sval[0][0] == 'L') {
+    leftAxis(cmd_axis_args.x->ival[0], cmd_axis_args.y->ival[0], true);
+  } else if (cmd_axis_args.side->sval[0][0] == 'R') {
+    rightAxis(cmd_axis_args.x->ival[0], cmd_axis_args.y->ival[0], true);
+  } else {
+    printf("Unknown side \"%c\"!\n", cmd_axis_args.side->sval[0][0]);
+  }
+
+  return 0;
+}
+
 // Register console commands
 esp_err_t cmds_register() {
   ESP_LOGI(TAG, "Register console commands");
@@ -352,6 +409,14 @@ esp_err_t cmds_register() {
                                           .func = &cmd_dpad,
                                           .argtable = &cmd_dpad_args};
   ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_dpad_cfg));
+
+  // Register axis command
+  const esp_console_cmd_t cmd_axis_cfg = {.command = "axis",
+                                          .help = "Set value for axis stick",
+                                          .hint = NULL,
+                                          .func = &cmd_axis,
+                                          .argtable = &cmd_axis_args};
+  ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_axis_cfg));
 
   return ESP_OK;
 }
