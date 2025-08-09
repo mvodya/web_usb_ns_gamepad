@@ -285,16 +285,6 @@ static int cmd_usbinfo(int argc, char** argv) {
   return 0;
 }
 
-static int cmd_gptrig(int argc, char** argv) {
-  hid_device_report_t report = {};
-  report.buttons |= (uint16_t)1 << 0x00;
-  ESP_ERROR_CHECK_WITHOUT_ABORT(set_hid_report(report));
-  vTaskDelay(pdMS_TO_TICKS(100));
-  report.buttons &= ~((uint16_t)1 << 0x00);
-  ESP_ERROR_CHECK_WITHOUT_ABORT(set_hid_report(report));
-  return 0;
-}
-
 // Register console commands
 esp_err_t cmds_register() {
   ESP_LOGI(TAG, "Register console commands");
@@ -306,14 +296,6 @@ esp_err_t cmds_register() {
       .func = &cmd_usbinfo,
   };
   ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_usbinfo_cfg));
-
-  const esp_console_cmd_t cmd_gptrig_cfg = {
-      .command = "gptrig",
-      .help = "Test gamepad trigger",
-      .hint = NULL,
-      .func = &cmd_gptrig,
-  };
-  ESP_ERROR_CHECK(esp_console_cmd_register(&cmd_gptrig_cfg));
 
   return ESP_OK;
 }
