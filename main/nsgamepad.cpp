@@ -12,7 +12,15 @@ namespace NSGamepad {
 
 static const char* TAG = "app gamepad";
 
-HID::hid_device_report_t hid_report = {};
+HID::hid_device_report_t hid_report = {
+    .buttons = 0x0,
+    .dPad = 0xF,
+    // Set axis to zero
+    .leftXAxis = 0x80,
+    .leftYAxis = 0x80,
+    .rightXAxis = 0x80,
+    .rightYAxis = 0x80,
+};
 
 // Buttons string list
 static const char* button_names[] = {"Y",    "B",       "A",         "X",        "L",      "R",

@@ -202,6 +202,12 @@ void hid_handler_task(void*) {
         if (xSemaphoreTake(hid_report_state_mtx, portMAX_DELAY)) {
           // Clear report
           memset(&hid_report_state, 0x00, sizeof(hid_report_state));
+          
+          // Set axis to zero
+          hid_report_state.leftXAxis = 0x80;
+          hid_report_state.leftYAxis = 0x80;
+          hid_report_state.rightXAxis = 0x80;
+          hid_report_state.rightYAxis = 0x80;
 
           // Push one button for init
           tud_hid_report(0, &hid_report_state, sizeof(hid_report_state));
