@@ -57,11 +57,9 @@ void dpad(DpadDirection direction, bool update = false);
 void dpadClick(DpadDirection direction, uint16_t delay = 100);
 
 // Left stick axis
-void leftXAxis(uint8_t);
-void leftYAxis(uint8_t);
-// Right stick axi
-void rightXAxis(uint8_t);
-void rightYAxis(uint8_t);
+void leftAxis(uint8_t x, uint8_t y, bool update = false);
+// Right stick axis
+void rightAxis(uint8_t x, uint8_t y, bool update = false);
 
 // Register console commands
 esp_err_t cmds_register();
