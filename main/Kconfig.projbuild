@@ -1,0 +1,19 @@
+menu "Web USB NS Gamepad Config"
+
+  menu "WiFi Connection"
+    
+  config NSG_WIFI_SSID
+    string "WiFi SSID"
+    default "wifissid"
+    help
+      SSID (network name) for connect to
+  
+  config NSG_WIFI_PASSWORD
+    string "WiFi Password"
+    default "password"
+    help
+      WiFi password (WPA or WPA2) for connect
+
+  endmenu
+
+endmenu
