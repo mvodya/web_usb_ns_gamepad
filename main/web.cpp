@@ -287,6 +287,71 @@ esp_err_t api_rest_release(httpd_req_t* req) {
   return ESP_OK;
 }
 
+// API: Click gamepad button
+esp_err_t api_rest_click(httpd_req_t* req) {
+  int total = req->content_len;
+  int current = 0;
+
+  // Check content length
+  if (total >= sizeof(data_buf) - 1) {
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+    return ESP_FAIL;
+  }
+
+  // Get data by chunks
+  while (current < total) {
+    int received = httpd_req_recv(req, data_buf + current, sizeof(data_buf) - current);
+    if (received <= 0) {
+      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+      return ESP_FAIL;
+    }
+    current += received;
+  }
+
+  // Read JSON
+  cJSON* root = cJSON_ParseWithLength(data_buf, total);
+  if (!root) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "JSON parse error");
+    return ESP_FAIL;
+  }
+
+  // Read delay
+  uint16_t delay = 100;
+  cJSON* obj_delay = cJSON_GetObjectItem(root, "delay");
+  if (obj_delay) {
+    delay = obj_delay->valueint;
+  }
+
+  // Get buttons array
+  cJSON* buttons = cJSON_GetObjectItem(root, "buttons");
+  if (!buttons) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missed buttons array");
+    cJSON_Delete(root);
+    return ESP_FAIL;
+  }
+
+  // Reads array of buttons
+  cJSON* button;
+  cJSON_ArrayForEach(button, buttons) {
+    // Parse button & click
+    if (auto it = buttons_map.find(button->valuestring); it != buttons_map.end()) {
+      // Button recognized, click it
+      NSGamepad::Buttons b = it->second;
+      NSGamepad::click(b, delay);
+    } else {
+      httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Unknown button in buttons array");
+      ESP_LOGW(TAG, "Unrecognized button: \"%s\"", button->valuestring);
+      cJSON_Delete(root);
+      return ESP_FAIL;
+    }
+  }
+
+  httpd_resp_sendstr(req, "OK");
+
+  cJSON_Delete(root);
+  return ESP_OK;
+}
+
 // Setup HTTP/RESTful server
 esp_err_t web_server_init() {
   ESP_LOGI(TAG, "WEB server initialization");
@@ -313,6 +378,11 @@ esp_err_t web_server_init() {
   httpd_uri_t cfg_api_rest_release = {
       .uri = "/api/release", .method = HTTP_POST, .handler = api_rest_release, .user_ctx = NULL};
   httpd_register_uri_handler(server, &cfg_api_rest_release);
+
+  // API: Click gamepad button
+  httpd_uri_t cfg_api_rest_click = {
+      .uri = "/api/click", .method = HTTP_POST, .handler = api_rest_click, .user_ctx = NULL};
+  httpd_register_uri_handler(server, &cfg_api_rest_click);
 
   return ESP_OK;
 }
