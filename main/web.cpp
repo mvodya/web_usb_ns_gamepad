@@ -1,5 +1,9 @@
 #include "web.hpp"
 
+#include <exception>
+#include <string>
+#include <unordered_map>
+
 #include "cJSON.h"
 #include "esp_err.h"
 #include "esp_event.h"
@@ -8,6 +12,7 @@
 #include "esp_wifi.h"
 #include "esp_wifi_types_generic.h"
 #include "freertos/idf_additions.h"
+#include "nsgamepad.hpp"
 #include "projdefs.h"
 
 // Convert option NSG_WIFI_SCAN_AUTH_MODE_THRESHOLD -> wifi_auth_mode_t
@@ -33,9 +38,7 @@ namespace WEB {
 
 static const char* TAG = "app web";
 
-struct web_server_ctx {
-  int todo;
-};
+char data_buf[1024 * 40];
 
 // Event group to signal, when WiFi connected
 static EventGroupHandle_t wifi_event_group;
@@ -139,11 +142,89 @@ esp_err_t api_rest_ping(httpd_req_t* req) {
   return ESP_OK;
 }
 
+// Buttons mapping
+static const std::unordered_map<std::string, NSGamepad::Buttons> buttons_map = {
+    {"Y", NSGamepad::Buttons::Y},
+    {"B", NSGamepad::Buttons::B},
+    {"A", NSGamepad::Buttons::A},
+    {"X", NSGamepad::Buttons::X},
+    {"L", NSGamepad::Buttons::L},
+    {"R", NSGamepad::Buttons::R},
+    {"ZL", NSGamepad::Buttons::ZL},
+    {"ZR", NSGamepad::Buttons::ZR},
+    {"Minus", NSGamepad::Buttons::Minus},
+    {"Plus", NSGamepad::Buttons::Plus},
+    {"LStick", NSGamepad::Buttons::LStick},
+    {"RStick", NSGamepad::Buttons::RStick},
+    {"Home", NSGamepad::Buttons::Home},
+    {"Capture", NSGamepad::Buttons::Capture},
+    {"Reserved1", NSGamepad::Buttons::Reserved1},
+    {"Reserved2", NSGamepad::Buttons::Reserved2}};
+
+// API: Press gamepad button
+esp_err_t api_rest_press(httpd_req_t* req) {
+  int total = req->content_len;
+  int current = 0;
+
+  // Check content length
+  if (total >= sizeof(data_buf) - 1) {
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+    return ESP_FAIL;
+  }
+
+  // Get data by chunks
+  while (current < total) {
+    int received = httpd_req_recv(req, data_buf + current, sizeof(data_buf) - current);
+    if (received <= 0) {
+      httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive data");
+      return ESP_FAIL;
+    }
+    current += received;
+  }
+
+  // Read JSON
+  ESP_LOGI(TAG, "Start JSON parse");
+  cJSON* root = cJSON_ParseWithLength(data_buf, total);
+  if (!root) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "JSON parse error");
+    return ESP_FAIL;
+  }
+
+  // Get buttons array
+  cJSON* buttons = cJSON_GetObjectItem(root, "buttons");
+  if (!buttons) {
+    httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Missed buttons array");
+    cJSON_Delete(root);
+    return ESP_FAIL;
+  }
+
+  // Reads array of buttons
+  cJSON* button;
+  cJSON_ArrayForEach(button, buttons) {
+    // Parse button & press
+    if (auto it = buttons_map.find(button->valuestring); it != buttons_map.end()) {
+      // Button recognized, press it
+      NSGamepad::Buttons b = it->second;
+      NSGamepad::press(b);
+    } else {
+      httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Unknown button in buttons array");
+      ESP_LOGW(TAG, "Unrecognized button: \"%s\"", button->valuestring);
+      cJSON_Delete(root);
+      return ESP_FAIL;
+    }
+  }
+  // Report HID state
+  NSGamepad::update();
+
+  httpd_resp_sendstr(req, "Button NOT pressed");
+
+  cJSON_Delete(root);
+  return ESP_OK;
+}
+
 // Setup HTTP/RESTful server
 esp_err_t web_server_init() {
   ESP_LOGI(TAG, "WEB server initialization");
-
-  web_server_ctx server_ctx = {};
 
   // Setup HTTP server
   httpd_handle_t server = NULL;
@@ -153,10 +234,15 @@ esp_err_t web_server_init() {
   ESP_LOGI(TAG, "Starting HTTP Server");
   ESP_ERROR_CHECK(httpd_start(&server, &config));
 
-  /* URI handler for fetching temperature data */
-  httpd_uri_t temperature_data_get_uri = {
-      .uri = "/api/ping", .method = HTTP_GET, .handler = api_rest_ping, .user_ctx = &server_ctx};
-  httpd_register_uri_handler(server, &temperature_data_get_uri);
+  // API: Test ping API
+  httpd_uri_t cfg_api_rest_ping = {
+      .uri = "/api/ping", .method = HTTP_GET, .handler = api_rest_ping, .user_ctx = NULL};
+  httpd_register_uri_handler(server, &cfg_api_rest_ping);
+
+  // API: Press gamepad button
+  httpd_uri_t cfg_api_rest_press = {
+      .uri = "/api/press", .method = HTTP_POST, .handler = api_rest_press, .user_ctx = NULL};
+  httpd_register_uri_handler(server, &cfg_api_rest_press);
 
   return ESP_OK;
 }
