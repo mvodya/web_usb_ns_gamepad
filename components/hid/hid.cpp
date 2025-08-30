@@ -1,3 +1,17 @@
+// SPDX-License-Identifier: MIT
+/**
+ * @file hid.cpp
+ * @brief Implementation of the HID (Human Interface Device) component
+ *
+ * This file contains the implementation details of the HID component:
+ * USB descriptors, TinyUSB callbacks, FreeRTOS task for HID polling, and
+ * internal synchronization primitives for thread-safe state management.
+ *
+ * Author: Mark Vodyanitskiy (@mvodya)
+ * Copyright (c) 2025
+ * Contact: mvodya@icloud.com
+ */
+
 #include "hid.hpp"
 
 #include "class/hid/hid.h"
@@ -8,6 +22,7 @@
 #include "esp_log.h"
 #include "freertos/idf_additions.h"
 #include "portmacro.h"
+#include "projdefs.h"
 #include "tinyusb.h"
 
 namespace HID {
@@ -108,11 +123,11 @@ const tusb_desc_device_t device_descriptor = {
 // USB String descriptor
 const char* hid_string_descriptor[5] = {
     // array of pointer to string descriptors
-    (char[]){0x09, 0x04},  // 0: is supported language is English (0x0409)
-    "mvodya",              // 1: Manufacturer
-    "WEB USB NS Gamepad",  // 2: Product
-    "123456",              // 3: Serials, should use chip ID
-    "WEB USB NS Gamepad",  // 4: HID
+    (char[]){0x09, 0x04},                 // 0: is supported language is English (0x0409)
+    CONFIG_NSG_HID_STRDESC_MANUFACTURER,  // 1: Manufacturer
+    CONFIG_NSG_HID_STRDESC_PRODUCT,       // 2: Product
+    CONFIG_NSG_HID_STRDESC_SERIAL,        // 3: Serials, should use chip ID
+    CONFIG_NSG_HID_STRDESC_HID,           // 4: HID
 };
 
 // USB Configuration descriptor
@@ -202,7 +217,7 @@ void hid_handler_task(void*) {
         if (xSemaphoreTake(hid_report_state_mtx, portMAX_DELAY)) {
           // Clear report
           memset(&hid_report_state, 0x00, sizeof(hid_report_state));
-          
+
           // Set axis to zero
           hid_report_state.leftXAxis = 0x80;
           hid_report_state.leftYAxis = 0x80;

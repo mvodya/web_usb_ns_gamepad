@@ -1,0 +1,32 @@
+menu "Web USB NS HID Configurations"
+  menu "String Descriptor"
+    config NSG_HID_STRDESC_MANUFACTURER
+      string "Manufacturer"
+      default "mvodya"
+      help
+        USB string descriptor identifying the manufacturer of the device.
+        Appears in system device information and is useful for debugging or distinguishing between different vendors.
+    
+    config NSG_HID_STRDESC_PRODUCT
+      string "Product"
+      default "WEB USB NS Gamepad"
+      help
+        USB string descriptor specifying the product name.
+        Shown in the operating system when the device is connected.
+    
+    config NSG_HID_STRDESC_SERIAL
+      string "Serial"
+      default "123456"
+      help
+        USB string descriptor with the device serial number.
+        Should be unique per device to allow the OS to differentiate between multiple units of the same product.
+    
+    config NSG_HID_STRDESC_HID
+      string "HID"
+      default "WEB USB NS Gamepad"
+      help
+        USB string descriptor used specifically for the HID interface.
+        Typically matches the product name, but can be customized to reflect a specific HID profile.
+
+  endmenu
+endmenu

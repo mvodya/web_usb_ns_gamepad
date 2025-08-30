@@ -1,7 +1,0 @@
-menu "Web USB NS Gamepad Config"
-
-  menu "HID"
-
-  endmenu
-
-endmenu
