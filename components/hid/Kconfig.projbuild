@@ -29,4 +29,21 @@ menu "Web USB NS HID Configurations"
         Typically matches the product name, but can be customized to reflect a specific HID profile.
 
   endmenu
+
+  config NSG_HID_AUTO_INIT_AFTER_MOUNT
+    bool "Auto init gamepad after connect"
+    default y
+      help
+        When enabled, gamepad automatically send an initial "button press" report after USB enumeration.  
+        This is required for the Nintendo Switch to recognize and display the controller in the system menu.  
+
+        If disabled, the controller will not appear until the user manually presses at least one button.  
+
+  config NSG_HID_POOLING_TICKRATE_MS
+    int "Pooling tickrate (ms)"
+    range 1 1000
+    default 10
+    help
+      Interval in milliseconds between HID reports sent over USB.  
+
 endmenu

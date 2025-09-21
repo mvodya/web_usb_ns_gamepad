@@ -206,9 +206,9 @@ inline void wait_hid_report() {
 
 // Task for USB HID report
 void hid_handler_task(void*) {
-  const TickType_t freq = pdMS_TO_TICKS(10);
+  const TickType_t freq = pdMS_TO_TICKS(CONFIG_NSG_HID_POOLING_TICKRATE_MS);
   TickType_t last_wake_time = xTaskGetTickCount();
-  ESP_LOGI(TAG, "HID handler task runned, pooling tickrate: %d", 10);
+  ESP_LOGI(TAG, "HID handler task runned, pooling tickrate: %d", CONFIG_NSG_HID_POOLING_TICKRATE_MS);
 
   while (1) {
     if (tud_mounted()) {
@@ -225,6 +225,7 @@ void hid_handler_task(void*) {
           hid_report_state.rightYAxis = 0x80;
 
           // Push one button for init
+#if CONFIG_NSG_HID_AUTO_INIT_AFTER_MOUNT
           tud_hid_report(0, &hid_report_state, sizeof(hid_report_state));
           vTaskDelay(pdMS_TO_TICKS(1000));
           hid_report_state.buttons = (uint16_t)1;
@@ -234,6 +235,7 @@ void hid_handler_task(void*) {
           tud_hid_report(0, &hid_report_state, sizeof(hid_report_state));
           vTaskDelay(pdMS_TO_TICKS(100));
           xSemaphoreGive(hid_report_state_mtx);
+#endif
         }
 
         ESP_LOGI(TAG, "Gamepad connected");
@@ -296,7 +298,7 @@ static int cmd_usbinfo(int argc, char** argv) {
   printf("  Device connection state: %s\r\n", tud_connected() ? "connected" : "unconnected");
   printf("  Device suspension state: %s\r\n", tud_suspended() ? "suspended" : "not suspended");
   printf("  Gamepad connected: %s\r\n", is_gamepad_connected() ? "true" : "false");
-  printf("  Pooling tickrate: %d\r\n", 10);
+  printf("  Pooling tickrate: %d\r\n", CONFIG_NSG_HID_POOLING_TICKRATE_MS);
   return 0;
 }
 
