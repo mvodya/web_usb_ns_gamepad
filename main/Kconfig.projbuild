@@ -1,0 +1,51 @@
+menu "Web USB NS Gamepad Config"
+
+  menu "WiFi Connection"
+
+  config NSG_WIFI_SSID
+    string "WiFi SSID"
+    default "wifissid"
+    help
+      SSID (network name) for connect to
+  
+  config NSG_WIFI_PASSWORD
+    string "WiFi Password"
+    default "password"
+    help
+      WiFi password (WPA or WPA2) for connect
+
+  choice NSG_WIFI_SCAN_AUTH_MODE_THRESHOLD
+    prompt "WiFi Scan auth mode threshold"
+    default NSG_WIFI_AUTH_WPA2_PSK
+    help
+      The weakest authmode to accept in the scan mode.
+      This value defaults to NSG_WIFI_AUTH_WPA2_PSK in case password is present and NSG_WIFI_AUTH_OPEN is used.
+      Please select NSG_WIFI_AUTH_WEP/NSG_WIFI_AUTH_WPA_PSK in case AP is operating in WEP/WPA mode.
+
+    config NSG_WIFI_AUTH_OPEN
+      bool "OPEN"
+    config NSG_WIFI_AUTH_WEP
+      bool "WEP"
+    config NSG_WIFI_AUTH_WPA_PSK
+      bool "WPA PSK"
+    config NSG_WIFI_AUTH_WPA2_PSK
+      bool "WPA2 PSK"
+    config NSG_WIFI_AUTH_WPA_WPA2_PSK
+      bool "WPA/WPA2 PSK"
+    config NSG_WIFI_AUTH_WPA3_PSK
+      bool "WPA3 PSK"
+    config NSG_WIFI_AUTH_WPA2_WPA3_PSK
+      bool "WPA2/WPA3 PSK"
+    config NSG_WIFI_AUTH_WAPI_PSK
+      bool "WAPI PSK"
+    endchoice
+
+    config NSG_WIFI_MAXIMUM_RETRY
+      int "Maximum retry to connect WiFi AP"
+      default 10
+      help
+        Set the Maximum retry to avoid station reconnecting to the AP unlimited when the AP is really inexistent.
+
+  endmenu
+
+endmenu
